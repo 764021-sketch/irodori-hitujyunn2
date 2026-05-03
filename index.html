@@ -140,6 +140,16 @@
         .modal-content { background: white; padding: 25px; border-radius: 15px; text-align: center; max-width: 300px; }
 
         input[type="file"] { display: none; }
+
+        .footer-guide {
+            position: fixed;
+            bottom: 10px;
+            width: 100%;
+            text-align: center;
+            font-size: 12px;
+            color: #888;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
@@ -186,6 +196,10 @@
     </div>
 </main>
 
+<div class="footer-guide">
+    「いろどり筆順」へようこそ。画像を読み込み、なぞり終わると自動で次の画に進みます。
+</div>
+
 <script>
     const fileInput = document.getElementById('fileInput');
     const bgCanvas = document.getElementById('bgCanvas');
@@ -215,7 +229,6 @@
     let pendingAction = null;
     let currentPenWidth = 25;
 
-    // マスク用（切り抜き処理用）
     const maskCanvas = document.createElement('canvas');
     const maskCtx = maskCanvas.getContext('2d');
 
@@ -278,7 +291,7 @@
             charIndex: currentCharIndex,
             strokeIndexInChar: currentStrokeInChar,
             color: strokeColors[currentStrokeInChar % strokeColors.length],
-            width: currentPenWidth, // 描いた時点の太さを保存
+            width: currentPenWidth,
             segments: [] 
         });
     }
@@ -323,7 +336,6 @@
         drawCtx.drawImage(baseImage, 0, 0, drawCanvas.width, drawCanvas.height);
         drawCtx.globalCompositeOperation = 'source-over';
 
-        // 番号描画
         strokes.forEach(s => {
             if (s.segments.length > 0) {
                 const first = s.segments[0];
@@ -395,487 +407,6 @@
     drawCanvas.addEventListener('touchmove', (e) => { e.preventDefault(); draw(e); }, {passive: false});
     drawCanvas.addEventListener('touchend', endDrawing);
     window.addEventListener('resize', () => { if (baseImage) resizeCanvas(baseImage.width, baseImage.height); });
-    init();
-</script>
-</body>
-</html><!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>いろどり筆順 - 臨書学習支援アプリ</title>
-    <style>
-        :root {
-            --bg-pastel: #fdf6e3;
-            --primary: #5d5c5c;
-            --accent: #4a90e2;
-            --white: #ffffff;
-            --shadow: 0 4px 6px rgba(0,0,0,0.1);
-            --bg-image-opacity: 0.6;
-        }
-
-        body {
-            font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", sans-serif;
-            background-color: var(--bg-pastel);
-            margin: 0;
-            padding: 0;
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            overflow: hidden;
-            color: var(--primary);
-        }
-
-        header {
-            background-color: rgba(255, 255, 255, 0.8);
-            backdrop-filter: blur(5px);
-            padding: 10px 15px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            align-items: center;
-            justify-content: center;
-            box-shadow: var(--shadow);
-            z-index: 100;
-        }
-
-        /* アプリ名の表示 */
-        .app-name {
-            font-weight: bold;
-            color: #ff0055;
-            margin-right: 15px;
-            font-size: 18px;
-            border-right: 2px solid #eee;
-            padding-right: 15px;
-        }
-
-        .btn {
-            padding: 8px 14px;
-            border: none;
-            border-radius: 10px;
-            font-size: 13px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        }
-
-        .btn:active { transform: translateY(2px); }
-        .btn-upload { background-color: #ffffff; border: 2px solid #ddd; }
-        .btn-remove-bg { background-color: #f8f9fa; border: 1px solid #dee2e6; color: #666; }
-        .btn-next-char { background-color: #ffd3b6; color: #6d4c41; }
-        .btn-undo { background-color: #dcedc1; color: #333; }
-        .btn-reset { background-color: #ffaaa5; color: #780000; }
-
-        .status-container {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-
-        .status-badge {
-            background: #fff;
-            padding: 6px 12px;
-            border-radius: 15px;
-            border: 2px solid #eee;
-            font-size: 13px;
-            white-space: nowrap;
-        }
-
-        main {
-            flex: 1;
-            position: relative;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 10px;
-            overflow: hidden;
-        }
-
-        #stage {
-            position: relative;
-            background-color: white;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-            border-radius: 8px;
-            max-width: 100%;
-            max-height: 100%;
-            cursor: crosshair;
-        }
-
-        canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            touch-action: none;
-        }
-
-        #bgCanvas { 
-            z-index: 1; 
-            border-radius: 8px; 
-            opacity: var(--bg-image-opacity); 
-        } 
-        #drawCanvas { z-index: 2; }
-
-        .guide-text {
-            position: absolute;
-            bottom: 20px;
-            color: #888;
-            font-size: 13px;
-            pointer-events: none;
-        }
-
-        input[type="file"] { display: none; }
-
-        #historyPanel {
-            position: fixed;
-            right: 10px;
-            top: 100px;
-            width: 120px;
-            background: rgba(255,255,255,0.8);
-            backdrop-filter: blur(5px);
-            border-radius: 10px;
-            padding: 10px;
-            font-size: 12px;
-            max-height: 50vh;
-            overflow-y: auto;
-            box-shadow: var(--shadow);
-            z-index: 90;
-        }
-        .history-item {
-            border-bottom: 1px solid #eee;
-            padding: 4px 0;
-            display: flex;
-            justify-content: space-between;
-        }
-
-        #customModal {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.6);
-            display: none;
-            justify-content: center;
-            align-items: center;
-            z-index: 2000;
-        }
-        .modal-content {
-            background: white;
-            padding: 25px;
-            border-radius: 15px;
-            text-align: center;
-            max-width: 300px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-        }
-        .modal-btns {
-            display: flex;
-            justify-content: center;
-            gap: 10px;
-            margin-top: 20px;
-        }
-    </style>
-</head>
-<body>
-
-<header>
-    <div class="app-name">いろどり筆順</div>
-    <label class="btn btn-upload">
-        📷 古典画像を選択
-        <input type="file" id="fileInput" accept="image/*">
-    </label>
-    
-    <button id="removeBgBtn" class="btn btn-remove-bg" style="display: none;">✖ 古典画像を削除</button>
-    <button id="nextCharBtn" class="btn btn-next-char">✨ 次の文字</button>
-    <button id="undoBtn" class="btn btn-undo">↩️ 戻す</button>
-    <button id="resetBtn" class="btn btn-reset">🗑️ クリア</button>
-
-    <div class="status-container">
-        <div class="status-badge">
-            <span id="charLabel">1文字目</span>: <span id="strokeCounter" style="color: #ff0055; font-weight: bold;">1</span>画目
-        </div>
-    </div>
-</header>
-
-<div id="historyPanel" style="display: none;">
-    <div style="font-weight: bold; margin-bottom: 5px; border-bottom: 2px solid #ccc;">文字別画数</div>
-    <div id="historyList"></div>
-</div>
-
-<div id="customModal">
-    <div class="modal-content">
-        <p id="modalMessage">メッセージ</p>
-        <div class="modal-btns">
-            <button id="modalOk" class="btn" style="background: #ffaaa5;">はい</button>
-            <button id="modalCancel" class="btn" style="background: #eee;">いいえ</button>
-        </div>
-    </div>
-</div>
-
-<main>
-    <div id="stage">
-        <canvas id="bgCanvas"></canvas>
-        <canvas id="drawCanvas"></canvas>
-    </div>
-    <div id="guideText" class="guide-text">「いろどり筆順」へようこそ。画像を読み込み、なぞり終わると自動で次の画に進みます。</div>
-</main>
-
-<script>
-    const fileInput = document.getElementById('fileInput');
-    const removeBgBtn = document.getElementById('removeBgBtn');
-    const bgCanvas = document.getElementById('bgCanvas');
-    const drawCanvas = document.getElementById('drawCanvas');
-    const bgCtx = bgCanvas.getContext('2d', { willReadFrequently: true });
-    const drawCtx = drawCanvas.getContext('2d');
-    const strokeCounter = document.getElementById('strokeCounter');
-    const charLabel = document.getElementById('charLabel');
-    const historyPanel = document.getElementById('historyPanel');
-    const historyList = document.getElementById('historyList');
-    const stage = document.getElementById('stage');
-    const guideText = document.getElementById('guideText');
-    
-    const customModal = document.getElementById('customModal');
-    const modalMessage = document.getElementById('modalMessage');
-    const modalOk = document.getElementById('modalOk');
-    const modalCancel = document.getElementById('modalCancel');
-
-    const strokeColors = [
-        '#ff0055', // 蛍光レッド
-        '#00e5ff', // ネオンブルー
-        '#7cfc00', // ライムグリーン
-        '#ff9100', // ネオンオレンジ
-        '#cc00ff', // ビびっどパープル
-        '#ffb7ce'  // 淡いピンク
-    ];
-    let currentCharIndex = 0;
-    let strokeCountsPerChar = [0];
-    let strokes = []; 
-    let isDrawing = false;
-    let baseImage = null;
-    let lastPos = null;
-    let pendingAction = null;
-
-    const maskCanvas = document.createElement('canvas');
-    const maskCtx = maskCanvas.getContext('2d');
-
-    function init() {
-        resizeCanvas(800, 800);
-        updateUI();
-    }
-
-    function resizeCanvas(w, h) {
-        const maxWidth = window.innerWidth * 0.9;
-        const maxHeight = window.innerHeight * 0.75;
-        const ratio = Math.min(maxWidth / w, maxHeight / h);
-        const targetW = w * ratio;
-        const targetH = h * ratio;
-        stage.style.width = targetW + 'px';
-        stage.style.height = targetH + 'px';
-        bgCanvas.width = targetW;
-        bgCanvas.height = targetH;
-        drawCanvas.width = targetW;
-        drawCanvas.height = targetH;
-        maskCanvas.width = targetW;
-        maskCanvas.height = targetH;
-        if (baseImage) bgCtx.drawImage(baseImage, 0, 0, targetW, targetH);
-        redrawAll();
-    }
-
-    fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const img = new Image();
-            img.onload = () => {
-                baseImage = img;
-                resetAppState();
-                if (guideText) guideText.style.display = 'none';
-                removeBgBtn.style.display = 'flex';
-                historyPanel.style.display = 'block';
-                resizeCanvas(img.width, img.height);
-            };
-            img.src = event.target.result;
-        };
-        reader.readAsDataURL(file);
-    });
-
-    function resetAppState() {
-        strokes = [];
-        currentCharIndex = 0;
-        strokeCountsPerChar = [0];
-        updateUI();
-        redrawAll();
-    }
-
-    function getPos(e) {
-        const rect = drawCanvas.getBoundingClientRect();
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        return { x: (clientX - rect.left), y: (clientY - rect.top) };
-    }
-
-    function startDrawing(e) {
-        if (!baseImage) return;
-        isDrawing = true;
-        lastPos = getPos(e);
-        const currentStrokeInChar = strokeCountsPerChar[currentCharIndex];
-        strokes.push({ 
-            charIndex: currentCharIndex,
-            strokeIndexInChar: currentCountToUseForColor(currentStrokeInChar),
-            color: strokeColors[currentStrokeInChar % strokeColors.length],
-            segments: [] 
-        });
-    }
-
-    function currentCountToUseForColor(count) {
-        return count;
-    }
-
-    function draw(e) {
-        if (!isDrawing) return;
-        const pos = getPos(e);
-        const brushWidth = drawCanvas.width * 0.03; 
-        strokes[strokes.length - 1].segments.push({
-            x1: lastPos.x, y1: lastPos.y, x2: pos.x, y2: pos.y, width: brushWidth
-        });
-        lastPos = pos;
-        redrawAll();
-    }
-
-    function endDrawing() { 
-        if (isDrawing) {
-            isDrawing = false;
-            strokeCountsPerChar[currentCharIndex]++;
-            updateUI();
-        }
-    }
-
-    function redrawAll() {
-        drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
-        if (!baseImage || strokes.length === 0) return;
-
-        maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
-        strokes.forEach(s => {
-            maskCtx.beginPath();
-            maskCtx.strokeStyle = s.color;
-            maskCtx.lineCap = 'round';
-            maskCtx.lineJoin = 'round';
-            s.segments.forEach(seg => {
-                maskCtx.lineWidth = seg.width;
-                maskCtx.moveTo(seg.x1, seg.y1);
-                maskCtx.lineTo(seg.x2, seg.y2);
-                maskCtx.stroke();
-            });
-        });
-
-        drawCtx.drawImage(maskCanvas, 0, 0);
-        drawCtx.globalCompositeOperation = 'destination-in';
-        drawCtx.drawImage(baseImage, 0, 0, drawCanvas.width, drawCanvas.height);
-        drawCtx.globalCompositeOperation = 'source-over';
-
-        strokes.forEach(s => {
-            if (s.segments.length > 0) {
-                const firstSeg = s.segments[0];
-                const num = s.strokeIndexInChar + 1;
-                
-                drawCtx.save();
-                drawCtx.font = `bold ${Math.max(16, drawCanvas.width * 0.045)}px sans-serif`;
-                drawCtx.textAlign = "center";
-                drawCtx.textBaseline = "middle";
-                
-                drawCtx.strokeStyle = "white";
-                drawCtx.lineWidth = 4;
-                drawCtx.strokeText(num, firstSeg.x1 - 18, firstSeg.y1 - 18);
-                
-                drawCtx.fillStyle = s.color;
-                drawCtx.fillText(num, firstSeg.x1 - 18, firstSeg.y1 - 18);
-                drawCtx.restore();
-            }
-        });
-    }
-
-    function showConfirm(msg, onOk) {
-        modalMessage.innerText = msg;
-        pendingAction = onOk;
-        customModal.style.display = 'flex';
-    }
-
-    modalOk.addEventListener('click', () => {
-        if (pendingAction) pendingAction();
-        customModal.style.display = 'none';
-        pendingAction = null;
-    });
-
-    modalCancel.addEventListener('click', () => {
-        customModal.style.display = 'none';
-        pendingAction = null;
-    });
-
-    document.getElementById('nextCharBtn').addEventListener('click', () => {
-        if (strokeCountsPerChar[currentCharIndex] === 0 && strokes.filter(s => s.charIndex === currentCharIndex).length === 0) return;
-        currentCharIndex++;
-        strokeCountsPerChar[currentCharIndex] = 0;
-        updateUI();
-    });
-
-    document.getElementById('undoBtn').addEventListener('click', () => {
-        if (strokes.length > 0) {
-            const removed = strokes.pop();
-            if (removed.charIndex === currentCharIndex && strokeCountsPerChar[currentCharIndex] > 0) {
-                strokeCountsPerChar[currentCharIndex]--;
-            }
-            redrawAll();
-            updateUI();
-        }
-    });
-
-    removeBgBtn.addEventListener('click', () => {
-        showConfirm("古典画像を削除し、全てを初期状態に戻しますか？", () => {
-            baseImage = null;
-            fileInput.value = '';
-            removeBgBtn.style.display = 'none';
-            historyPanel.style.display = 'none';
-            if (guideText) guideText.style.display = 'block';
-            bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
-            resetAppState();
-        });
-    });
-
-    document.getElementById('resetBtn').addEventListener('click', () => {
-        showConfirm("描画を全て消去しますか？（古典画像は残ります）", () => {
-            resetAppState();
-        });
-    });
-
-    function updateUI() {
-        charLabel.innerText = `${currentCharIndex + 1}文字目`;
-        const currentCount = strokeCountsPerChar[currentCharIndex];
-        
-        strokeCounter.innerText = currentCount + 1;
-        strokeCounter.style.color = strokeColors[currentCount % strokeColors.length];
-        
-        historyList.innerHTML = '';
-        strokeCountsPerChar.forEach((count, idx) => {
-            if (idx > currentCharIndex) return;
-            const item = document.createElement('div');
-            item.className = 'history-item';
-            item.innerHTML = `<span>${idx + 1}文字目</span> <span>${count}画</span>`;
-            if (idx === currentCharIndex) item.style.color = '#ff0055'; 
-            historyList.appendChild(item);
-        });
-    }
-
-    drawCanvas.addEventListener('mousedown', startDrawing);
-    window.addEventListener('mousemove', draw);
-    window.addEventListener('mouseup', endDrawing);
-    drawCanvas.addEventListener('touchstart', (e) => { e.preventDefault(); startDrawing(e); }, {passive: false});
-    drawCanvas.addEventListener('touchmove', (e) => { e.preventDefault(); draw(e); }, {passive: false});
-    drawCanvas.addEventListener('touchend', endDrawing);
-    window.addEventListener('resize', () => {
-        if (baseImage) resizeCanvas(baseImage.width, baseImage.height);
-        else resizeCanvas(800, 800);
-    });
     init();
 </script>
 </body>
