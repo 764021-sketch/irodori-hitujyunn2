@@ -32,6 +32,406 @@
             padding: 10px 15px;
             display: flex;
             flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+            justify-content: center;
+            box-shadow: var(--shadow);
+            z-index: 100;
+        }
+
+        .app-name {
+            font-weight: bold;
+            color: #ff0055;
+            margin-right: 10px;
+            font-size: 18px;
+            border-right: 2px solid #eee;
+            padding-right: 15px;
+        }
+
+        .btn {
+            padding: 8px 14px;
+            border: none;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .btn:active { transform: translateY(2px); }
+        .btn-upload { background-color: #ffffff; border: 2px solid #ddd; }
+        .btn-next-char { background-color: #ffd3b6; color: #6d4c41; }
+        .btn-undo { background-color: #dcedc1; color: #333; }
+        .btn-reset { background-color: #ffaaa5; color: #780000; }
+
+        /* 太さ調整コントロール */
+        .brush-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #fff;
+            padding: 5px 12px;
+            border-radius: 20px;
+            border: 1px solid #ddd;
+        }
+        .brush-control label { font-size: 12px; font-weight: bold; }
+        input[type="range"] { cursor: pointer; width: 80px; }
+
+        .status-badge {
+            background: #fff;
+            padding: 6px 12px;
+            border-radius: 15px;
+            border: 2px solid #eee;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+
+        main {
+            flex: 1;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 10px;
+            overflow: hidden;
+        }
+
+        #stage {
+            position: relative;
+            background-color: white;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            border-radius: 8px;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0; left: 0;
+            touch-action: none;
+        }
+
+        #bgCanvas { z-index: 1; border-radius: 8px; opacity: var(--bg-image-opacity); } 
+        #drawCanvas { z-index: 2; }
+
+        #historyPanel {
+            position: fixed;
+            right: 10px; top: 110px;
+            width: 110px;
+            background: rgba(255,255,255,0.8);
+            backdrop-filter: blur(5px);
+            border-radius: 10px;
+            padding: 10px;
+            font-size: 12px;
+            box-shadow: var(--shadow);
+            z-index: 90;
+        }
+        .history-item { border-bottom: 1px solid #eee; padding: 4px 0; display: flex; justify-content: space-between; }
+
+        #customModal {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6);
+            display: none; justify-content: center; align-items: center;
+            z-index: 2000;
+        }
+        .modal-content { background: white; padding: 25px; border-radius: 15px; text-align: center; max-width: 300px; }
+
+        input[type="file"] { display: none; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="app-name">いろどり筆順</div>
+    
+    <label class="btn btn-upload">📷 画像選択<input type="file" id="fileInput" accept="image/*"></label>
+
+    <div class="brush-control">
+        <label>太さ</label>
+        <input type="range" id="penWidthRange" min="5" max="80" value="25">
+        <span id="penWidthValue" style="font-size: 12px; min-width: 25px;">25</span>
+    </div>
+
+    <button id="nextCharBtn" class="btn btn-next-char">✨ 次の文字</button>
+    <button id="undoBtn" class="btn btn-undo">↩️ 戻す</button>
+    <button id="resetBtn" class="btn btn-reset">🗑️ 消去</button>
+
+    <div class="status-badge">
+        <span id="charLabel">1文字目</span>: <span id="strokeCounter" style="color: #ff0055; font-weight: bold;">1</span>画目
+    </div>
+</header>
+
+<div id="historyPanel" style="display: none;">
+    <div style="font-weight: bold; margin-bottom: 5px;">履歴</div>
+    <div id="historyList"></div>
+</div>
+
+<div id="customModal">
+    <div class="modal-content">
+        <p id="modalMessage"></p>
+        <div style="display: flex; justify-content: center; gap: 10px; margin-top: 20px;">
+            <button id="modalOk" class="btn" style="background: #ffaaa5;">はい</button>
+            <button id="modalCancel" class="btn" style="background: #eee;">いいえ</button>
+        </div>
+    </div>
+</div>
+
+<main>
+    <div id="stage">
+        <canvas id="bgCanvas"></canvas>
+        <canvas id="drawCanvas"></canvas>
+    </div>
+</main>
+
+<script>
+    const fileInput = document.getElementById('fileInput');
+    const bgCanvas = document.getElementById('bgCanvas');
+    const drawCanvas = document.getElementById('drawCanvas');
+    const bgCtx = bgCanvas.getContext('2d');
+    const drawCtx = drawCanvas.getContext('2d');
+    const penWidthRange = document.getElementById('penWidthRange');
+    const penWidthValue = document.getElementById('penWidthValue');
+    const strokeCounter = document.getElementById('strokeCounter');
+    const charLabel = document.getElementById('charLabel');
+    const historyPanel = document.getElementById('historyPanel');
+    const historyList = document.getElementById('historyList');
+    const stage = document.getElementById('stage');
+    
+    const customModal = document.getElementById('customModal');
+    const modalMessage = document.getElementById('modalMessage');
+    const modalOk = document.getElementById('modalOk');
+    const modalCancel = document.getElementById('modalCancel');
+
+    const strokeColors = ['#ff0055', '#00e5ff', '#7cfc00', '#ff9100', '#cc00ff', '#ffb7ce'];
+    let currentCharIndex = 0;
+    let strokeCountsPerChar = [0];
+    let strokes = []; 
+    let isDrawing = false;
+    let baseImage = null;
+    let lastPos = null;
+    let pendingAction = null;
+    let currentPenWidth = 25;
+
+    // マスク用（切り抜き処理用）
+    const maskCanvas = document.createElement('canvas');
+    const maskCtx = maskCanvas.getContext('2d');
+
+    function init() {
+        resizeCanvas(800, 800);
+        updateUI();
+    }
+
+    penWidthRange.addEventListener('input', (e) => {
+        currentPenWidth = parseInt(e.target.value);
+        penWidthValue.innerText = currentPenWidth;
+    });
+
+    function resizeCanvas(w, h) {
+        const maxWidth = window.innerWidth * 0.95;
+        const maxHeight = window.innerHeight * 0.8;
+        const ratio = Math.min(maxWidth / w, maxHeight / h);
+        const targetW = w * ratio;
+        const targetH = h * ratio;
+        stage.style.width = targetW + 'px';
+        stage.style.height = targetH + 'px';
+        bgCanvas.width = targetW; bgCanvas.height = targetH;
+        drawCanvas.width = targetW; drawCanvas.height = targetH;
+        maskCanvas.width = targetW; maskCanvas.height = targetH;
+        if (baseImage) bgCtx.drawImage(baseImage, 0, 0, targetW, targetH);
+        redrawAll();
+    }
+
+    fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+                baseImage = img;
+                strokes = []; currentCharIndex = 0; strokeCountsPerChar = [0];
+                historyPanel.style.display = 'block';
+                resizeCanvas(img.width, img.height);
+                updateUI();
+            };
+            img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+
+    function getPos(e) {
+        const rect = drawCanvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return { x: clientX - rect.left, y: clientY - rect.top };
+    }
+
+    function startDrawing(e) {
+        if (!baseImage) return;
+        isDrawing = true;
+        lastPos = getPos(e);
+        const currentStrokeInChar = strokeCountsPerChar[currentCharIndex];
+        strokes.push({ 
+            charIndex: currentCharIndex,
+            strokeIndexInChar: currentStrokeInChar,
+            color: strokeColors[currentStrokeInChar % strokeColors.length],
+            width: currentPenWidth, // 描いた時点の太さを保存
+            segments: [] 
+        });
+    }
+
+    function draw(e) {
+        if (!isDrawing) return;
+        const pos = getPos(e);
+        const s = strokes[strokes.length - 1];
+        s.segments.push({ x1: lastPos.x, y1: lastPos.y, x2: pos.x, y2: pos.y });
+        lastPos = pos;
+        redrawAll();
+    }
+
+    function endDrawing() { 
+        if (isDrawing) {
+            isDrawing = false;
+            strokeCountsPerChar[currentCharIndex]++;
+            updateUI();
+        }
+    }
+
+    function redrawAll() {
+        drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+        if (!baseImage || strokes.length === 0) return;
+
+        maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+        strokes.forEach(s => {
+            maskCtx.beginPath();
+            maskCtx.strokeStyle = s.color;
+            maskCtx.lineWidth = s.width;
+            maskCtx.lineCap = 'round';
+            maskCtx.lineJoin = 'round';
+            s.segments.forEach(seg => {
+                maskCtx.moveTo(seg.x1, seg.y1);
+                maskCtx.lineTo(seg.x2, seg.y2);
+            });
+            maskCtx.stroke();
+        });
+
+        drawCtx.drawImage(maskCanvas, 0, 0);
+        drawCtx.globalCompositeOperation = 'destination-in';
+        drawCtx.drawImage(baseImage, 0, 0, drawCanvas.width, drawCanvas.height);
+        drawCtx.globalCompositeOperation = 'source-over';
+
+        // 番号描画
+        strokes.forEach(s => {
+            if (s.segments.length > 0) {
+                const first = s.segments[0];
+                const num = s.strokeIndexInChar + 1;
+                drawCtx.font = `bold ${Math.max(16, s.width * 0.8)}px sans-serif`;
+                drawCtx.textAlign = "center";
+                drawCtx.textBaseline = "middle";
+                drawCtx.strokeStyle = "white";
+                drawCtx.lineWidth = 3;
+                drawCtx.strokeText(num, first.x1 - s.width/1.5, first.y1 - s.width/1.5);
+                drawCtx.fillStyle = s.color;
+                drawCtx.fillText(num, first.x1 - s.width/1.5, first.y1 - s.width/1.5);
+            }
+        });
+    }
+
+    function updateUI() {
+        charLabel.innerText = `${currentCharIndex + 1}文字目`;
+        const count = strokeCountsPerChar[currentCharIndex];
+        strokeCounter.innerText = count + 1;
+        strokeCounter.style.color = strokeColors[count % strokeColors.length];
+        historyList.innerHTML = '';
+        strokeCountsPerChar.forEach((c, i) => {
+            if (i > currentCharIndex) return;
+            const item = document.createElement('div');
+            item.className = 'history-item';
+            item.innerHTML = `<span>${i+1}文字目</span><span>${c}画</span>`;
+            if (i === currentCharIndex) item.style.color = '#ff0055';
+            historyList.appendChild(item);
+        });
+    }
+
+    function showConfirm(msg, okFn) {
+        modalMessage.innerText = msg;
+        pendingAction = okFn;
+        customModal.style.display = 'flex';
+    }
+
+    modalOk.onclick = () => { pendingAction(); customModal.style.display = 'none'; };
+    modalCancel.onclick = () => { customModal.style.display = 'none'; };
+
+    document.getElementById('nextCharBtn').onclick = () => {
+        if (strokeCountsPerChar[currentCharIndex] > 0) {
+            currentCharIndex++; strokeCountsPerChar[currentCharIndex] = 0; updateUI();
+        }
+    };
+
+    document.getElementById('undoBtn').onclick = () => {
+        if (strokes.length > 0) {
+            const removed = strokes.pop();
+            if (removed.charIndex === currentCharIndex && strokeCountsPerChar[currentCharIndex] > 0) {
+                strokeCountsPerChar[currentCharIndex]--;
+            }
+            redrawAll(); updateUI();
+        }
+    };
+
+    document.getElementById('resetBtn').onclick = () => {
+        showConfirm("現在の練習内容をすべて消去しますか？", () => {
+            strokes = []; currentCharIndex = 0; strokeCountsPerChar = [0];
+            redrawAll(); updateUI();
+        });
+    };
+
+    drawCanvas.addEventListener('mousedown', startDrawing);
+    window.addEventListener('mousemove', draw);
+    window.addEventListener('mouseup', endDrawing);
+    drawCanvas.addEventListener('touchstart', (e) => { e.preventDefault(); startDrawing(e); }, {passive: false});
+    drawCanvas.addEventListener('touchmove', (e) => { e.preventDefault(); draw(e); }, {passive: false});
+    drawCanvas.addEventListener('touchend', endDrawing);
+    window.addEventListener('resize', () => { if (baseImage) resizeCanvas(baseImage.width, baseImage.height); });
+    init();
+</script>
+</body>
+</html><!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>いろどり筆順 - 臨書学習支援アプリ</title>
+    <style>
+        :root {
+            --bg-pastel: #fdf6e3;
+            --primary: #5d5c5c;
+            --accent: #4a90e2;
+            --white: #ffffff;
+            --shadow: 0 4px 6px rgba(0,0,0,0.1);
+            --bg-image-opacity: 0.6;
+        }
+
+        body {
+            font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", sans-serif;
+            background-color: var(--bg-pastel);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+            color: var(--primary);
+        }
+
+        header {
+            background-color: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(5px);
+            padding: 10px 15px;
+            display: flex;
+            flex-wrap: wrap;
             gap: 8px;
             align-items: center;
             justify-content: center;
